@@ -232,6 +232,7 @@ struct CountdownWidgetView: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .top, spacing: 12) {
                 CountdownIcon(countdown: c, size: 40 * c.iconSize, style: .onCard)
+                    .padding(.top, 4)
                 Spacer(minLength: 0)
                 VStack(alignment: .trailing, spacing: -4) {
                     bigValue(c)
@@ -244,7 +245,7 @@ struct CountdownWidgetView: View {
                 .frame(maxWidth: 180, alignment: .trailing)
                 // Big digits sit below their line's top edge. Shift only the
                 // number up (offset doesn't move the icon) so their tops line up.
-                .offset(y: -12)
+                .offset(y: -8)
             }
             Spacer(minLength: 0)
             Text(c.title).font(.title3.weight(.bold)).lineLimit(1)
