@@ -244,7 +244,7 @@ struct CountdownWidgetView: View {
                     .lineLimit(1)
                     .multilineTextAlignment(.trailing)
                 unitText(c).font(.headline).opacity(0.85)
-                ticker(c, alignment: .trailing).font(.subheadline.weight(.semibold)).opacity(0.85)
+                ticker(c, alignment: .trailing).font(.subheadline.weight(.semibold)).opacity(0.85).padding(.top, 5)
             }
             .frame(maxWidth: 180, alignment: .trailing)
         }
