@@ -244,7 +244,7 @@ struct CountdownWidgetView: View {
                 .frame(maxWidth: 180, alignment: .trailing)
                 // Big digits sit below their line's top edge. Shift only the
                 // number up (offset doesn't move the icon) so their tops line up.
-                .offset(y: -11)
+                .offset(y: -15)
             }
             Spacer(minLength: 0)
             Text(c.title).font(.title3.weight(.bold)).lineLimit(1)

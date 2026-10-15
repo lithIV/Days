@@ -16,9 +16,43 @@ enum IconStore {
 
     static func image(_ name: String) -> UIImage? {
         if let cached = cache.object(forKey: name as NSString) { return cached }
-        guard let image = UIImage(contentsOfFile: directory.appendingPathComponent(name).path) else { return nil }
+        guard let loaded = UIImage(contentsOfFile: directory.appendingPathComponent(name).path) else { return nil }
+        let image = trimmingTransparentEdges(loaded)
         cache.setObject(image, forKey: name as NSString)
         return image
+    }
+
+    /// Crops fully see-through borders so the visible artwork lines up with
+    /// text instead of floating inside invisible padding.
+    static func trimmingTransparentEdges(_ image: UIImage) -> UIImage {
+        guard let cg = image.cgImage else { return image }
+        let w = cg.width, h = cg.height
+        var pixels = [UInt8](repeating: 0, count: w * h * 4)
+        let drawn: Bool = pixels.withUnsafeMutableBytes { buffer in
+            guard let ctx = CGContext(data: buffer.baseAddress, width: w, height: h, bitsPerComponent: 8,
+                                      bytesPerRow: w * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+            return true
+        }
+        guard drawn else { return image }
+
+        // Bitmap rows run top to bottom, matching CGImage cropping coordinates.
+        var minX = w, minY = h, maxX = -1, maxY = -1
+        for y in 0..<h {
+            let row = y * w * 4
+            for x in 0..<w where pixels[row + x * 4 + 3] > 8 {
+                if x < minX { minX = x }
+                if x > maxX { maxX = x }
+                if y < minY { minY = y }
+                if y > maxY { maxY = y }
+            }
+        }
+        guard maxX >= minX, maxY >= minY,
+              minX > 0 || minY > 0 || maxX < w - 1 || maxY < h - 1,
+              let cropped = cg.cropping(to: CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1))
+        else { return image }
+        return UIImage(cgImage: cropped, scale: image.scale, orientation: image.imageOrientation)
     }
 
     /// Downscales the image (widgets have tight memory and image-size
@@ -69,7 +103,10 @@ struct CountdownIcon: View {
 
     var body: some View {
         glyph
-            .frame(width: size * glyphScale, height: size * glyphScale)
+            // On cards, pin wide or short custom images to the top-left so
+            // their visible top lines up with the text beside them.
+            .frame(width: size * glyphScale, height: size * glyphScale,
+                   alignment: style == .onCard ? .topLeading : .center)
             .frame(width: size, height: size)
             .background {
                 if showsBadge {
