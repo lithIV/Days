@@ -242,15 +242,17 @@ struct CountdownWidgetView: View {
                     unitText(c).font(.headline).opacity(0.85)
                 }
                 .frame(maxWidth: 180, alignment: .trailing)
+                // Big digits sit below their line's top edge; lift them so
+                // the top of the number lines up with the top of the icon.
+                .alignmentGuide(.top) { d in d[.top] + 11 }
             }
             Spacer(minLength: 0)
             Text(c.title).font(.title3.weight(.bold)).lineLimit(1)
-            // Date and live ticker share one line. Timer text in widgets has no
-            // reliable baseline, so center them and use the same text size.
-            HStack(alignment: .center, spacing: 8) {
+            // Date and live ticker share one line so they sit on the same baseline.
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(c.dateText(at: entry.date)).font(.caption).opacity(0.8).lineLimit(1)
                 Spacer(minLength: 0)
-                ticker(c, alignment: .trailing).font(.caption.weight(.semibold)).opacity(0.85)
+                ticker(c, alignment: .trailing).font(.subheadline.weight(.semibold)).opacity(0.85)
             }
         }
         .foregroundStyle(c.cardForeground)
