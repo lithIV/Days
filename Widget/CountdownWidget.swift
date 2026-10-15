@@ -232,7 +232,7 @@ struct CountdownWidgetView: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .top, spacing: 12) {
                 CountdownIcon(countdown: c, size: 40 * c.iconSize, style: .onCard)
-                    .padding(.top, 4)
+                    .padding(.top, 2)
                 Spacer(minLength: 0)
                 VStack(alignment: .trailing, spacing: -4) {
                     bigValue(c)
@@ -241,7 +241,7 @@ struct CountdownWidgetView: View {
                         .lineLimit(1)
                         .multilineTextAlignment(.trailing)
                         // Down with the icon, closer to "days" (which stays put).
-                        .offset(y: 4)
+                        .offset(y: 2)
                     unitText(c).font(.headline).opacity(0.85)
                 }
                 .frame(maxWidth: 180, alignment: .trailing)
