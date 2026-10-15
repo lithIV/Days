@@ -240,12 +240,14 @@ struct CountdownWidgetView: View {
                         .minimumScaleFactor(0.35)
                         .lineLimit(1)
                         .multilineTextAlignment(.trailing)
+                        // Down with the icon, closer to "days" (which stays put).
+                        .offset(y: 4)
                     unitText(c).font(.headline).opacity(0.85)
                 }
                 .frame(maxWidth: 180, alignment: .trailing)
                 // Big digits sit below their line's top edge. Shift only the
                 // number up (offset doesn't move the icon) so their tops line up.
-                .offset(y: -8)
+                .offset(y: -12)
             }
             Spacer(minLength: 0)
             Text(c.title).font(.title3.weight(.bold)).lineLimit(1)
