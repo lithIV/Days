@@ -120,7 +120,7 @@ struct CountdownProvider: AppIntentTimelineProvider {
         let dayBoundaries = saved.flatMap { c in
             (1...4).flatMap { k -> [Date] in
                 let boundary = c.target(from: now).addingTimeInterval(-Double(k) * 86_400)
-                return [boundary, boundary.addingTimeInterval(3600), boundary.addingTimeInterval(600)]
+                return [boundary, boundary.addingTimeInterval(-3600), boundary.addingTimeInterval(-600)]
             }
         }.filter { $0 > now && $0 < horizon }
         let dates = Set([now] + midnights + targets + dayBoundaries).sorted()
