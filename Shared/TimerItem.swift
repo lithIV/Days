@@ -76,7 +76,17 @@ enum SharedStore {
     static let widgetKind = "TockTimers"
     private static let timersKey = "timers"
 
-    static let defaults: UserDefaults = UserDefaults(suiteName: resolvedAppGroup) ?? .standard
+    static let defaults: UserDefaults = {
+        let shared = UserDefaults(suiteName: resolvedAppGroup) ?? .standard
+        // Earlier builds always used the un-renamed group, which on re-signed
+        // installs was just a private file. Carry that data over once.
+        if resolvedAppGroup != appGroup, let legacy = UserDefaults(suiteName: appGroup) {
+            for key in ["timers", "countdowns"] where shared.object(forKey: key) == nil {
+                if let value = legacy.object(forKey: key) { shared.set(value, forKey: key) }
+            }
+        }
+        return shared
+    }()
 
     /// SideStore/AltStore rename App Groups when re-signing (they append the
     /// team ID), so find the group this install was actually given.
