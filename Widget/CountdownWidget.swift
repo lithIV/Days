@@ -136,7 +136,7 @@ struct CountdownWidgetView: View {
         content(shown, single: single)
             .containerBackground(for: .widget) {
                 if isSystem, single, let c = shown.first {
-                    Rectangle().fill(c.cardBackground)
+                    CountdownBackground(countdown: c)
                 } else if isSystem {
                     Color(uiColor: .systemBackground)
                 } else {
@@ -213,6 +213,7 @@ struct CountdownWidgetView: View {
             Text(c.title).font(.caption.weight(.medium)).lineLimit(1).opacity(0.9)
         }
         .foregroundStyle(c.cardForeground)
+        .shadow(color: .black.opacity(c.hasBackgroundImage ? 0.4 : 0), radius: 6, y: 1)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 
@@ -236,6 +237,7 @@ struct CountdownWidgetView: View {
             .frame(maxWidth: 180, alignment: .trailing)
         }
         .foregroundStyle(c.cardForeground)
+        .shadow(color: .black.opacity(c.hasBackgroundImage ? 0.4 : 0), radius: 6, y: 1)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -259,6 +261,7 @@ struct CountdownWidgetView: View {
             Text(c.dateText(at: entry.date)).font(.subheadline).opacity(0.8)
         }
         .foregroundStyle(c.cardForeground)
+        .shadow(color: .black.opacity(c.hasBackgroundImage ? 0.4 : 0), radius: 6, y: 1)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 

@@ -21,22 +21,24 @@ enum IconStore {
         return image
     }
 
-    /// Downscales the image (widgets have tight memory limits), keeps
-    /// transparency and saves it as PNG. Returns the new file name.
-    static func save(_ data: Data) -> String? {
+    /// Downscales the image (widgets have tight memory and image-size
+    /// limits) and saves it: PNG keeps transparency for icons, JPEG keeps
+    /// photos small. Returns the new file name.
+    static func save(_ data: Data, maxSide: CGFloat = 384, photo: Bool = false) -> String? {
         guard let source = UIImage(data: data), source.size.width > 0, source.size.height > 0 else { return nil }
-        let maxSide: CGFloat = 384
         let scale = min(1, maxSide / max(source.size.width, source.size.height))
         let size = CGSize(width: (source.size.width * scale).rounded(), height: (source.size.height * scale).rounded())
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
-        format.opaque = false
-        let png = UIGraphicsImageRenderer(size: size, format: format).pngData { _ in
+        format.opaque = photo
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        let draw: (UIGraphicsImageRendererContext) -> Void = { _ in
             source.draw(in: CGRect(origin: .zero, size: size))
         }
-        let name = UUID().uuidString + ".png"
+        let encoded = photo ? renderer.jpegData(withCompressionQuality: 0.85, actions: draw) : renderer.pngData(actions: draw)
+        let name = UUID().uuidString + (photo ? ".jpg" : ".png")
         do {
-            try png.write(to: directory.appendingPathComponent(name), options: .atomic)
+            try encoded.write(to: directory.appendingPathComponent(name), options: .atomic)
             return name
         } catch {
             return nil
@@ -104,6 +106,32 @@ struct CountdownIcon: View {
                 .scaledToFit()
                 .fontWeight(.semibold)
                 .foregroundStyle(symbolColor)
+        }
+    }
+}
+
+/// What sits behind a countdown's card or widget: its photo (dimmed, blurred
+/// and faded toward the bottom so text stays readable) or its color.
+struct CountdownBackground: View {
+    let countdown: Countdown
+
+    var body: some View {
+        if let file = countdown.backgroundFile, let image = IconStore.image(file) {
+            Color.black
+                .overlay {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .blur(radius: countdown.blur, opaque: true)
+                }
+                .overlay { Color.black.opacity(countdown.dim) }
+                .overlay {
+                    LinearGradient(colors: [.black.opacity(0.15), .clear, .black.opacity(0.5)],
+                                   startPoint: .top, endPoint: .bottom)
+                }
+                .clipped()
+        } else {
+            Rectangle().fill(countdown.cardBackground)
         }
     }
 }

@@ -11,6 +11,14 @@ struct Countdown: Identifiable, Codable, Hashable {
     var colorName = "orange"
     /// File name of a custom icon in `IconStore`, used instead of `symbol`.
     var iconFile: String?
+    /// Optional photo behind the countdown on its card and widget.
+    var backgroundFile: String?
+    var backgroundDim: Double?
+    var backgroundBlur: Double?
+
+    var dim: Double { backgroundDim ?? 0.2 }
+    var blur: Double { backgroundBlur ?? 0 }
+    var hasBackgroundImage: Bool { backgroundFile != nil }
 
     enum Phase { case upcoming, today, past }
 
@@ -84,7 +92,7 @@ struct Countdown: Identifiable, Codable, Hashable {
     }
 
     /// Text color on top of `cardBackground`.
-    var cardForeground: Color { isColorless ? .primary : .white }
+    var cardForeground: Color { isColorless && !hasBackgroundImage ? .primary : .white }
 
     static let palette: [(name: String, color: Color)] = [
         ("orange", .orange), ("red", .red), ("pink", .pink), ("purple", .purple),

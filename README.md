@@ -1,4 +1,4 @@
-# Tock
+# Days (project: Tock)
 
 A small, native-feeling iOS countdown + timer app (SwiftUI, iOS 17+).
 
@@ -6,7 +6,8 @@ A small, native-feeling iOS countdown + timer app (SwiftUI, iOS 17+).
 - Count down to any date — all-day or a specific time
 - Yearly repeat for birthdays / holidays (rolls over to next year automatically)
 - Big hero card for the next one with a live `12d 04:22:31` ticker
-- Pick a color and icon per countdown; past ones move to a "Past" section
+- Pick a color (or none), an SF Symbol or your own transparent PNG icon, and a background photo with dim/blur
+- Past ones move to a "Past" section
 - Notification on the day (9 AM for all-day ones)
 
 **Timers**

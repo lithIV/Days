@@ -15,6 +15,7 @@ final class CountdownStore {
     func save(_ countdown: Countdown) {
         if let i = countdowns.firstIndex(where: { $0.id == countdown.id }) {
             if countdowns[i].iconFile != countdown.iconFile { IconStore.delete(countdowns[i].iconFile) }
+            if countdowns[i].backgroundFile != countdown.backgroundFile { IconStore.delete(countdowns[i].backgroundFile) }
             countdowns[i] = countdown
         } else {
             countdowns.append(countdown)
@@ -24,7 +25,10 @@ final class CountdownStore {
     }
 
     func delete(_ ids: Set<Countdown.ID>) {
-        countdowns.filter { ids.contains($0.id) }.forEach { IconStore.delete($0.iconFile) }
+        for c in countdowns where ids.contains(c.id) {
+            IconStore.delete(c.iconFile)
+            IconStore.delete(c.backgroundFile)
+        }
         countdowns.removeAll { ids.contains($0.id) }
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids.map(\.uuidString))
         persist()

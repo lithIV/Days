@@ -58,7 +58,7 @@ jobs:
           gh release delete tock-latest --yes --cleanup-tag || true
           gh release create tock-latest Tock.ipa \
             --target "$GITHUB_SHA" \
-            --title "Tock (latest build)" \
+            --title "Days (latest build)" \
             --notes "Unsigned IPA built from ${GITHUB_SHA::7}. Install with LiveContainer, SideStore or AltStore." \
             --prerelease
 

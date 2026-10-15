@@ -276,9 +276,11 @@ struct HeroCard: View {
             .opacity(0.85)
         }
         .foregroundStyle(countdown.cardForeground)
+        .shadow(color: .black.opacity(countdown.hasBackgroundImage ? 0.4 : 0), radius: 6, y: 1)
         .padding(20)
         .frame(maxWidth: .infinity, minHeight: 220, alignment: .leading)
-        .background(countdown.cardBackground, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .background { CountdownBackground(countdown: countdown) }
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .padding(.vertical, 6)
     }
@@ -294,7 +296,9 @@ struct EditCountdownView: View {
     @State private var draft: Countdown
     @State private var confirmDelete = false
     @State private var photoItem: PhotosPickerItem?
-    @State private var importingFile = false
+    @State private var backgroundItem: PhotosPickerItem?
+    @State private var importTarget: ImportTarget?
+    private enum ImportTarget { case icon, background }
     @State private var importFailed = false
     /// Icon files picked during this edit, cleaned up if not kept.
     @State private var pickedFiles: [String] = []
@@ -308,6 +312,14 @@ struct EditCountdownView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    HeroCard(countdown: draft, now: .now)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                } footer: {
+                    Text("Preview — this is how the countdown looks in the app and in a one-countdown widget.")
+                }
+
                 Section {
                     HStack(spacing: 14) {
                         CountdownIcon(countdown: draft, size: 44)
@@ -352,7 +364,7 @@ struct EditCountdownView: View {
                         Label("Choose from Photos", systemImage: "photo.on.rectangle")
                     }
                     Button {
-                        importingFile = true
+                        importTarget = .icon
                     } label: {
                         Label("Choose from Files", systemImage: "folder")
                     }
@@ -367,6 +379,37 @@ struct EditCountdownView: View {
                     Text("Custom Icon")
                 } footer: {
                     Text("Transparent PNGs keep their transparency. Pick \"No color\" above to show only your image.")
+                }
+
+                Section {
+                    PhotosPicker(selection: $backgroundItem, matching: .images) {
+                        Label(draft.hasBackgroundImage ? "Change Background Photo" : "Choose Background Photo",
+                              systemImage: "photo")
+                    }
+                    Button {
+                        importTarget = .background
+                    } label: {
+                        Label("Choose from Files", systemImage: "folder")
+                    }
+                    if draft.hasBackgroundImage {
+                        LabeledContent("Dim") {
+                            Slider(value: Binding(get: { draft.dim }, set: { draft.backgroundDim = $0 }), in: 0...0.8)
+                                .frame(maxWidth: 200)
+                        }
+                        LabeledContent("Blur") {
+                            Slider(value: Binding(get: { draft.blur }, set: { draft.backgroundBlur = $0 }), in: 0...20)
+                                .frame(maxWidth: 200)
+                        }
+                        Button(role: .destructive) {
+                            draft.backgroundFile = nil
+                        } label: {
+                            Label("Remove Background", systemImage: "xmark.circle")
+                        }
+                    }
+                } header: {
+                    Text("Background")
+                } footer: {
+                    Text("Fills the whole widget. Dim and blur help the numbers pop; a soft fade at the bottom keeps the title readable.")
                 }
 
                 Section("Icon") {
@@ -409,14 +452,14 @@ struct EditCountdownView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
-                        cleanUpPickedFiles(keeping: nil)
+                        cleanUpPickedFiles(keeping: [])
                         dismiss()
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(isNew ? "Add" : "Save") {
                         draft.title = draft.title.trimmingCharacters(in: .whitespaces)
-                        cleanUpPickedFiles(keeping: draft.iconFile)
+                        cleanUpPickedFiles(keeping: [draft.iconFile, draft.backgroundFile])
                         store.save(draft)
                         dismiss()
                     }
@@ -426,7 +469,7 @@ struct EditCountdownView: View {
             }
             .confirmationDialog("Delete this countdown?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
-                    cleanUpPickedFiles(keeping: nil)
+                    cleanUpPickedFiles(keeping: [])
                     store.delete([draft.id])
                     dismiss()
                 }
@@ -434,16 +477,24 @@ struct EditCountdownView: View {
             .onChange(of: photoItem) { _, item in
                 guard let item else { return }
                 Task {
-                    let data = try? await item.loadTransferable(type: Data.self)
-                    useImage(data)
+                    useImage(try? await item.loadTransferable(type: Data.self), for: .icon)
                     photoItem = nil
                 }
             }
-            .fileImporter(isPresented: $importingFile, allowedContentTypes: [.image]) { result in
+            .onChange(of: backgroundItem) { _, item in
+                guard let item else { return }
+                Task {
+                    useImage(try? await item.loadTransferable(type: Data.self), for: .background)
+                    backgroundItem = nil
+                }
+            }
+            .fileImporter(isPresented: Binding(get: { importTarget != nil }, set: { if !$0 { importTarget = nil } }),
+                          allowedContentTypes: [.image]) { result in
+                let target = importTarget ?? .icon
                 guard case .success(let url) = result else { return }
                 let scoped = url.startAccessingSecurityScopedResource()
                 defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                useImage(try? Data(contentsOf: url))
+                useImage(try? Data(contentsOf: url), for: target)
             }
             .alert("Couldn't use that image", isPresented: $importFailed) {
                 Button("OK", role: .cancel) {}
@@ -478,17 +529,25 @@ struct EditCountdownView: View {
         return draft.isColorless ? AnyShapeStyle(.tertiary) : AnyShapeStyle(draft.color.gradient)
     }
 
-    private func useImage(_ data: Data?) {
-        guard let data, let file = IconStore.save(data) else {
+    private func useImage(_ data: Data?, for target: ImportTarget) {
+        let file = data.flatMap { data in
+            target == .background
+                ? IconStore.save(data, maxSide: 1000, photo: true)
+                : IconStore.save(data)
+        }
+        guard let file else {
             importFailed = true
             return
         }
         pickedFiles.append(file)
-        draft.iconFile = file
+        switch target {
+        case .icon: draft.iconFile = file
+        case .background: draft.backgroundFile = file
+        }
     }
 
-    private func cleanUpPickedFiles(keeping kept: String?) {
-        for file in pickedFiles where file != kept { IconStore.delete(file) }
+    private func cleanUpPickedFiles(keeping kept: Set<String?>) {
+        for file in pickedFiles where !kept.contains(file) { IconStore.delete(file) }
         pickedFiles = []
     }
 }
