@@ -242,6 +242,9 @@ struct CountdownWidgetView: View {
                     unitText(c).font(.headline).opacity(0.85)
                 }
                 .frame(maxWidth: 180, alignment: .trailing)
+                // Big digits sit below their line's top edge; lift them so
+                // the top of the number lines up with the top of the icon.
+                .alignmentGuide(.top) { d in d[.top] + 11 }
             }
             Spacer(minLength: 0)
             Text(c.title).font(.title3.weight(.bold)).lineLimit(1)
