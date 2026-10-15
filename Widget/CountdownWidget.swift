@@ -244,7 +244,7 @@ struct CountdownWidgetView: View {
                     .lineLimit(1)
                     .multilineTextAlignment(.trailing)
                 unitText(c).font(.headline).opacity(0.85)
-                ticker(c).font(.subheadline.weight(.semibold)).opacity(0.85).padding(.top, 6)
+                ticker(c, alignment: .trailing).font(.subheadline.weight(.semibold)).opacity(0.85)
             }
             .frame(maxWidth: 180, alignment: .trailing)
         }
@@ -327,15 +327,17 @@ struct CountdownWidgetView: View {
 
     /// Live "35d 4:22:31" line. Skipped on the last day, when the big number
     /// itself is already ticking.
-    @ViewBuilder private func ticker(_ c: Countdown) -> some View {
+    @ViewBuilder private func ticker(_ c: Countdown, alignment: TextAlignment = .leading) -> some View {
         if entry.showTicker, c.phase(at: entry.date) == .upcoming, c.days(from: entry.date) > 0,
            let parts = c.tickerParts(at: entry.date) {
-            HStack(spacing: 0) {
-                if parts.days > 0 { Text("\(parts.days)d ") }
-                Text(timerInterval: entry.date...parts.until, countsDown: true)
-            }
-            .monospacedDigit()
-            .lineLimit(1)
+            // One concatenated Text so it sizes to its content; a bare timer
+            // Text in a widget stretches to fill the row.
+            (Text(parts.days > 0 ? "\(parts.days)d " : "")
+                + Text(timerInterval: entry.date...parts.until, countsDown: true))
+                .monospacedDigit()
+                .lineLimit(1)
+                .multilineTextAlignment(alignment)
+                .frame(maxWidth: .infinity, alignment: alignment == .trailing ? .trailing : .leading)
         }
     }
 
