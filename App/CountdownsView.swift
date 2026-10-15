@@ -247,7 +247,7 @@ struct HeroCard: View {
         let phase = countdown.phase(at: now)
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
-                CountdownIcon(countdown: countdown, size: 36, style: .onCard)
+                CountdownIcon(countdown: countdown, size: 36 * countdown.iconSize, style: .onCard)
                 Spacer()
                 if countdown.repeatsYearly {
                     Image(systemName: "repeat").font(.subheadline).opacity(0.8)
@@ -412,6 +412,10 @@ struct EditCountdownView: View {
                 }
 
                 Section("Icon") {
+                    LabeledContent("Size") {
+                        Slider(value: Binding(get: { draft.iconSize }, set: { draft.iconScale = $0 }), in: 0.6...2)
+                            .frame(maxWidth: 200)
+                    }
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 12) {
                         if let file = draft.iconFile, let image = IconStore.image(file) {
                             Image(uiImage: image)

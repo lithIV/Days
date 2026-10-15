@@ -11,7 +11,7 @@ struct TockApp: App {
         WindowGroup {
             ContentView()
                 .environment(countdowns)
-                .tint(.orange)
+                .tint(Color(red: 1, green: 0.27, blue: 0.55))
                 .preferredColorScheme(appearance.colorScheme)
         }
     }

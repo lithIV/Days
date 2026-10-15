@@ -16,6 +16,10 @@ struct Countdown: Identifiable, Codable, Hashable {
     var backgroundDim: Double?
     var backgroundBlur: Double?
 
+    /// Icon size multiplier on cards and single-countdown widgets.
+    var iconScale: Double?
+    var iconSize: Double { iconScale ?? 1 }
+
     var dim: Double { backgroundDim ?? 0.2 }
     var blur: Double { backgroundBlur ?? 0 }
     var hasBackgroundImage: Bool { backgroundFile != nil }
@@ -60,6 +64,16 @@ struct Countdown: Identifiable, Codable, Hashable {
             if d == 0 { return ("Now", "") }
             return ("\(-d)", -d == 1 ? "day ago" : "days ago")
         }
+    }
+
+    /// Whole 24-hour days left, plus the moment the leftover hours, minutes
+    /// and seconds run out. Lets widgets tick live with `Text(timerInterval:)`.
+    func tickerParts(at now: Date = .now) -> (days: Int, until: Date)? {
+        let t = target(from: now)
+        let total = t.timeIntervalSince(now)
+        guard total > 0 else { return nil }
+        let d = Int(total / 86_400)
+        return (d, t.addingTimeInterval(-Double(d) * 86_400))
     }
 
     /// "12d 04:22:31" style breakdown until the target.

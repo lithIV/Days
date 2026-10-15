@@ -62,6 +62,9 @@ struct CountdownWidgetIntent: WidgetConfigurationIntent {
 
     @Parameter(title: "Layout", default: .single)
     var layout: CountdownLayout
+
+    @Parameter(title: "Show hours, minutes & seconds", default: true)
+    var showTicker: Bool
 }
 
 // MARK: - Timeline
@@ -71,6 +74,7 @@ struct CountdownEntry: TimelineEntry {
     let countdowns: [Countdown]
     var selectedID: UUID?
     var layout: CountdownLayout = .single
+    var showTicker = true
 
     /// The picked countdown first, then upcoming ones (past only if nothing is upcoming).
     var shown: [Countdown] {
@@ -99,7 +103,8 @@ struct CountdownProvider: AppIntentTimelineProvider {
         let saved = SharedStore.loadCountdowns()
         if context.isPreview && saved.isEmpty { return placeholder(in: context) }
         return CountdownEntry(date: .now, countdowns: saved,
-                              selectedID: configuration.countdown?.id, layout: configuration.layout)
+                              selectedID: configuration.countdown?.id, layout: configuration.layout,
+                           showTicker: configuration.showTicker)
     }
 
     func timeline(for configuration: CountdownWidgetIntent, in context: Context) async -> Timeline<CountdownEntry> {
@@ -111,10 +116,15 @@ struct CountdownProvider: AppIntentTimelineProvider {
         let midnights = (1...3).compactMap { cal.date(byAdding: .day, value: $0, to: today) }
         let horizon = midnights.last ?? now.addingTimeInterval(86_400)
         let targets = saved.map { $0.target(from: now) }.filter { $0 > now && $0 < horizon }
-        let dates = Set([now] + midnights + targets).sorted()
+        // The live h:m:s ticker rolls over every 24 hours before each target.
+        let dayBoundaries = saved.flatMap { c in
+            (1...4).map { c.target(from: now).addingTimeInterval(-Double($0) * 86_400) }
+        }.filter { $0 > now && $0 < horizon }
+        let dates = Set([now] + midnights + targets + dayBoundaries).sorted()
         let entries = dates.map {
             CountdownEntry(date: $0, countdowns: saved,
-                           selectedID: configuration.countdown?.id, layout: configuration.layout)
+                           selectedID: configuration.countdown?.id, layout: configuration.layout,
+                           showTicker: configuration.showTicker)
         }
         return Timeline(entries: entries, policy: .atEnd)
     }
@@ -203,13 +213,14 @@ struct CountdownWidgetView: View {
 
     private func small(_ c: Countdown) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            CountdownIcon(countdown: c, size: 28, style: .onCard)
+            CountdownIcon(countdown: c, size: 28 * min(c.iconSize, 1.6), style: .onCard)
             Spacer(minLength: 0)
             bigValue(c)
                 .font(.system(size: 44, weight: .bold, design: .rounded))
                 .minimumScaleFactor(0.4)
                 .lineLimit(1)
             unitText(c).font(.subheadline.weight(.semibold)).opacity(0.85)
+            ticker(c).font(.caption.weight(.semibold)).opacity(0.85)
             Text(c.title).font(.caption.weight(.medium)).lineLimit(1).opacity(0.9)
         }
         .foregroundStyle(c.cardForeground)
@@ -220,7 +231,7 @@ struct CountdownWidgetView: View {
     private func medium(_ c: Countdown) -> some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                CountdownIcon(countdown: c, size: 40, style: .onCard)
+                CountdownIcon(countdown: c, size: 40 * c.iconSize, style: .onCard)
                 Spacer(minLength: 0)
                 Text(c.title).font(.title3.weight(.bold)).lineLimit(2)
                 Text(c.dateText(at: entry.date)).font(.caption).opacity(0.8).lineLimit(1)
@@ -233,6 +244,7 @@ struct CountdownWidgetView: View {
                     .lineLimit(1)
                     .multilineTextAlignment(.trailing)
                 unitText(c).font(.headline).opacity(0.85)
+                ticker(c).font(.subheadline.weight(.semibold)).opacity(0.85).padding(.top, 6)
             }
             .frame(maxWidth: 180, alignment: .trailing)
         }
@@ -244,7 +256,7 @@ struct CountdownWidgetView: View {
     private func large(_ c: Countdown) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .top) {
-                CountdownIcon(countdown: c, size: 64, style: .onCard)
+                CountdownIcon(countdown: c, size: 64 * c.iconSize, style: .onCard)
                 Spacer()
                 if c.repeatsYearly {
                     Image(systemName: "repeat").font(.headline).opacity(0.8)
@@ -256,6 +268,7 @@ struct CountdownWidgetView: View {
                 .minimumScaleFactor(0.3)
                 .lineLimit(1)
             unitText(c).font(.title2.weight(.semibold)).opacity(0.85)
+            ticker(c).font(.title3.weight(.semibold)).opacity(0.85)
             Spacer(minLength: 0)
             Text(c.title).font(.title.weight(.bold)).lineLimit(2)
             Text(c.dateText(at: entry.date)).font(.subheadline).opacity(0.8)
@@ -309,6 +322,20 @@ struct CountdownWidgetView: View {
             Text(timerInterval: entry.date...target, countsDown: true).monospacedDigit()
         } else {
             Text(c.headline(at: entry.date).value).monospacedDigit()
+        }
+    }
+
+    /// Live "35d 4:22:31" line. Skipped on the last day, when the big number
+    /// itself is already ticking.
+    @ViewBuilder private func ticker(_ c: Countdown) -> some View {
+        if entry.showTicker, c.phase(at: entry.date) == .upcoming, c.days(from: entry.date) > 0,
+           let parts = c.tickerParts(at: entry.date) {
+            HStack(spacing: 0) {
+                if parts.days > 0 { Text("\(parts.days)d ") }
+                Text(timerInterval: entry.date...parts.until, countsDown: true)
+            }
+            .monospacedDigit()
+            .lineLimit(1)
         }
     }
 
