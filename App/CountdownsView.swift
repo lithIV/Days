@@ -4,6 +4,9 @@ struct CountdownsView: View {
     @Environment(CountdownStore.self) private var store
     @State private var editing: Countdown?
     @State private var creating = false
+    @State private var selecting = false
+    @State private var selected: Set<Countdown.ID> = []
+    @State private var pendingDelete: Set<Countdown.ID> = []
 
     var body: some View {
         NavigationStack {
@@ -16,9 +19,16 @@ struct CountdownsView: View {
                 List {
                     if let next = upcoming.first {
                         HeroCard(countdown: next, now: now)
+                            .overlay(alignment: .topTrailing) {
+                                if selecting {
+                                    checkmark(selected.contains(next.id), onCard: true).padding(18)
+                                }
+                            }
+                            .opacity(selecting && !selected.contains(next.id) ? 0.6 : 1)
+                            .onTapGesture { tap(next) }
+                            .modifier(RowActions(countdown: next, actions: self))
                             .listRowInsets(EdgeInsets())
                             .listRowBackground(Color.clear)
-                            .onTapGesture { editing = next }
                     }
                     if upcoming.count > 1 {
                         Section("Upcoming") {
@@ -32,6 +42,8 @@ struct CountdownsView: View {
                     }
                 }
                 .listStyle(.insetGrouped)
+                .animation(.default, value: selecting)
+                .animation(.default, value: store.countdowns.map(\.id))
                 .overlay {
                     if store.countdowns.isEmpty {
                         ContentUnavailableView {
@@ -45,33 +57,153 @@ struct CountdownsView: View {
                     }
                 }
             }
-            .navigationTitle("Countdowns")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) { AppearanceMenu() }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { creating = true } label: { Image(systemName: "plus") }
-                }
-            }
+            .navigationTitle(selecting ? selectionTitle : "Countdowns")
+            .toolbar { toolbar }
+            .toolbar(selecting ? .hidden : .visible, for: .tabBar)
             .sheet(isPresented: $creating) {
                 EditCountdownView(countdown: nil)
             }
             .sheet(item: $editing) { countdown in
                 EditCountdownView(countdown: countdown)
             }
+            .confirmationDialog(deleteTitle, isPresented: Binding(
+                get: { !pendingDelete.isEmpty },
+                set: { if !$0 { pendingDelete = [] } }
+            ), titleVisibility: .visible) {
+                Button("Delete", role: .destructive) {
+                    store.delete(pendingDelete)
+                    selected.subtract(pendingDelete)
+                    pendingDelete = []
+                    if selected.isEmpty { selecting = false }
+                }
+            }
+            .onChange(of: store.countdowns.isEmpty) { _, empty in
+                if empty { selecting = false; selected = [] }
+            }
         }
     }
 
+    @ToolbarContentBuilder private var toolbar: some ToolbarContent {
+        if selecting {
+            ToolbarItem(placement: .topBarLeading) {
+                let all = Set(store.countdowns.map(\.id))
+                Button(selected == all ? "Deselect All" : "Select All") {
+                    selected = selected == all ? [] : all
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Done") { stopSelecting() }.bold()
+            }
+            ToolbarItem(placement: .bottomBar) {
+                Button(role: .destructive) {
+                    pendingDelete = selected
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                        .labelStyle(.titleAndIcon)
+                }
+                .tint(.red)
+                .disabled(selected.isEmpty)
+            }
+        } else {
+            ToolbarItem(placement: .topBarLeading) { AppearanceMenu() }
+            ToolbarItem(placement: .topBarTrailing) {
+                if !store.countdowns.isEmpty {
+                    Button("Select") { selecting = true }
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { creating = true } label: { Image(systemName: "plus") }
+            }
+        }
+    }
+
+    private var selectionTitle: String {
+        selected.isEmpty ? "Select Items" : "\(selected.count) Selected"
+    }
+
+    private var deleteTitle: String {
+        pendingDelete.count == 1 ? "Delete this countdown?" : "Delete \(pendingDelete.count) countdowns?"
+    }
+
     private func row(_ countdown: Countdown, now: Date) -> some View {
-        Button { editing = countdown } label: {
+        HStack(spacing: 12) {
+            if selecting {
+                checkmark(selected.contains(countdown.id), onCard: false)
+                    .transition(.move(edge: .leading).combined(with: .opacity))
+            }
             CountdownRow(countdown: countdown, now: now)
         }
-        .foregroundStyle(.primary)
-        .swipeActions {
-            Button(role: .destructive) {
-                store.delete(countdown.id)
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
+        .contentShape(Rectangle())
+        .onTapGesture { tap(countdown) }
+        .modifier(RowActions(countdown: countdown, actions: self))
+    }
+
+    private func checkmark(_ on: Bool, onCard: Bool) -> some View {
+        Image(systemName: on ? "checkmark.circle.fill" : "circle")
+            .font(.title2)
+            .foregroundStyle(on
+                ? AnyShapeStyle(onCard ? Color.white : Color.orange)
+                : AnyShapeStyle(onCard ? Color.white.opacity(0.9) : Color.secondary))
+    }
+
+    // MARK: Actions
+
+    private func tap(_ countdown: Countdown) {
+        if selecting {
+            if selected.contains(countdown.id) { selected.remove(countdown.id) } else { selected.insert(countdown.id) }
+        } else {
+            editing = countdown
+        }
+    }
+
+    fileprivate func edit(_ countdown: Countdown) { editing = countdown }
+
+    fileprivate func startSelecting(with countdown: Countdown) {
+        selected = [countdown.id]
+        selecting = true
+    }
+
+    fileprivate func askDelete(_ countdown: Countdown) { pendingDelete = [countdown.id] }
+
+    fileprivate func deleteNow(_ countdown: Countdown) { store.delete([countdown.id]) }
+
+    fileprivate var isSelecting: Bool { selecting }
+
+    private func stopSelecting() {
+        selecting = false
+        selected = []
+    }
+}
+
+/// Long-press menu and swipe actions shared by the hero card and the rows.
+private struct RowActions: ViewModifier {
+    let countdown: Countdown
+    let actions: CountdownsView
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if actions.isSelecting {
+            content
+        } else {
+            content
+                .contextMenu {
+                    Button { actions.edit(countdown) } label: { Label("Edit", systemImage: "pencil") }
+                    Button { actions.startSelecting(with: countdown) } label: {
+                        Label("Select", systemImage: "checkmark.circle")
+                    }
+                    Divider()
+                    Button(role: .destructive) { actions.askDelete(countdown) } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) { actions.deleteNow(countdown) } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+                .swipeActions(edge: .leading) {
+                    Button { actions.edit(countdown) } label: { Label("Edit", systemImage: "pencil") }
+                        .tint(.orange)
+                }
         }
     }
 }
@@ -260,7 +392,7 @@ struct EditCountdownView: View {
             }
             .confirmationDialog("Delete this countdown?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
-                    store.delete(draft.id)
+                    store.delete([draft.id])
                     dismiss()
                 }
             }

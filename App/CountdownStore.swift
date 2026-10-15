@@ -22,9 +22,9 @@ final class CountdownStore {
         persist()
     }
 
-    func delete(_ id: Countdown.ID) {
-        countdowns.removeAll { $0.id == id }
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id.uuidString])
+    func delete(_ ids: Set<Countdown.ID>) {
+        countdowns.removeAll { ids.contains($0.id) }
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids.map(\.uuidString))
         persist()
     }
 

@@ -76,7 +76,31 @@ enum SharedStore {
     static let widgetKind = "TockTimers"
     private static let timersKey = "timers"
 
-    static var defaults: UserDefaults { UserDefaults(suiteName: appGroup) ?? .standard }
+    static let defaults: UserDefaults = UserDefaults(suiteName: resolvedAppGroup) ?? .standard
+
+    /// SideStore/AltStore rename App Groups when re-signing (they append the
+    /// team ID), so find the group this install was actually given.
+    static let resolvedAppGroup: String = {
+        let candidates = (Bundle.main.object(forInfoDictionaryKey: "ALTAppGroups") as? [String] ?? [])
+            + provisionedAppGroups() + [appGroup]
+        let usable = candidates.filter {
+            FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: $0) != nil
+        }
+        return usable.first { $0.hasPrefix(appGroup) } ?? usable.first ?? appGroup
+    }()
+
+    /// App Groups listed in the bundle's embedded provisioning profile.
+    private static func provisionedAppGroups() -> [String] {
+        guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
+              let data = try? Data(contentsOf: url),
+              let start = data.range(of: Data("<?xml".utf8)),
+              let end = data.range(of: Data("</plist>".utf8), in: start.lowerBound..<data.endIndex),
+              let plist = try? PropertyListSerialization.propertyList(
+                  from: data[start.lowerBound..<end.upperBound], format: nil) as? [String: Any],
+              let entitlements = plist["Entitlements"] as? [String: Any]
+        else { return [] }
+        return entitlements["com.apple.security.application-groups"] as? [String] ?? []
+    }
 
     static func loadTimers() -> [TimerItem] {
         guard let data = defaults.data(forKey: timersKey) else { return [] }
