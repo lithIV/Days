@@ -1,17 +1,8 @@
 import SwiftUI
 
 struct ContentView: View {
-    @SceneStorage("tab") private var tab = "countdowns"
-
     var body: some View {
-        TabView(selection: $tab) {
-            CountdownsView()
-                .tabItem { Label("Countdowns", systemImage: "calendar.badge.clock") }
-                .tag("countdowns")
-            TimersView()
-                .tabItem { Label("Timers", systemImage: "timer") }
-                .tag("timers")
-        }
+        CountdownsView()
     }
 }
 

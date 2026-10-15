@@ -4,14 +4,12 @@ import UserNotifications
 @main
 struct TockApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var timers = TimerStore()
     @State private var countdowns = CountdownStore()
     @AppStorage("appearance") private var appearance: Appearance = .system
 
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environment(timers)
                 .environment(countdowns)
                 .tint(.orange)
                 .preferredColorScheme(appearance.colorScheme)
@@ -49,9 +47,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         return true
     }
 
-    // The app rings on its own while open, so skip the system banner then.
+    // Show the "it's today" banner even while the app is open.
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
-        []
+        [.banner, .list, .sound]
     }
 }

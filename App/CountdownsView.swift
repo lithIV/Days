@@ -60,7 +60,6 @@ struct CountdownsView: View {
             }
             .navigationTitle(selecting ? selectionTitle : "Countdowns")
             .toolbar { toolbar }
-            .toolbar(selecting ? .hidden : .visible, for: .tabBar)
             .sheet(isPresented: $creating) {
                 EditCountdownView(countdown: nil)
             }
