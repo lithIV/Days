@@ -1,0 +1,70 @@
+name: Build IPA
+
+on:
+  push:
+    branches: [claude/tock-ios-timer]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Tock.xcodeproj \
+            -scheme Tock \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            | tee xcodebuild.log | grep -E "error:|warning: .*Swift|BUILD (SUCCEEDED|FAILED)" || true
+          test -d build/Build/Products/Release-iphoneos/Tock.app
+
+      - name: Package IPA
+        run: |
+          APP=build/Build/Products/Release-iphoneos/Tock.app
+          # Ad-hoc sign so the entitlements travel with the binaries;
+          # LiveContainer / SideStore re-sign on install anyway.
+          codesign --force --sign - --entitlements Widget/TockWidget.entitlements "$APP/PlugIns/TockWidget.appex"
+          codesign --force --sign - --entitlements App/Tock.entitlements "$APP"
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -qry Tock.ipa Payload
+          ls -lh Tock.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Tock-ipa
+          path: Tock.ipa
+
+      - name: Publish to the "tock-latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete tock-latest --yes --cleanup-tag || true
+          gh release create tock-latest Tock.ipa \
+            --target "$GITHUB_SHA" \
+            --title "Tock (latest build)" \
+            --notes "Unsigned IPA built from ${GITHUB_SHA::7}. Install with LiveContainer, SideStore or AltStore." \
+            --prerelease
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: xcodebuild.log
