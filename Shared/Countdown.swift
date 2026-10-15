@@ -9,6 +9,8 @@ struct Countdown: Identifiable, Codable, Hashable {
     var repeatsYearly = false
     var symbol = "star.fill"
     var colorName = "orange"
+    /// File name of a custom icon in `IconStore`, used instead of `symbol`.
+    var iconFile: String?
 
     enum Phase { case upcoming, today, past }
 
@@ -68,6 +70,21 @@ struct Countdown: Identifiable, Codable, Hashable {
     }
 
     var color: Color { Self.palette.first { $0.name == colorName }?.color ?? .orange }
+
+    /// "No color": just the icon, no colored background anywhere.
+    static let noColor = "none"
+    var isColorless: Bool { colorName == Self.noColor }
+
+    /// Color for numbers and accents on a neutral background.
+    var accent: Color { isColorless ? .primary : color }
+
+    /// Background for cards and single-countdown widgets.
+    var cardBackground: AnyShapeStyle {
+        isColorless ? AnyShapeStyle(Color(uiColor: .secondarySystemGroupedBackground)) : AnyShapeStyle(color.gradient)
+    }
+
+    /// Text color on top of `cardBackground`.
+    var cardForeground: Color { isColorless ? .primary : .white }
 
     static let palette: [(name: String, color: Color)] = [
         ("orange", .orange), ("red", .red), ("pink", .pink), ("purple", .purple),

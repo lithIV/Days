@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 struct CountdownsView: View {
     @Environment(CountdownStore.self) private var store
@@ -216,7 +217,7 @@ struct CountdownRow: View {
         let headline = countdown.headline(at: now)
         let isPast = countdown.phase(at: now) == .past
         HStack(spacing: 14) {
-            SymbolBadge(symbol: countdown.symbol, color: countdown.color, size: 40)
+            CountdownIcon(countdown: countdown, size: 40)
                 .opacity(isPast ? 0.5 : 1)
             VStack(alignment: .leading, spacing: 2) {
                 Text(countdown.title).font(.headline).lineLimit(1)
@@ -227,7 +228,7 @@ struct CountdownRow: View {
                 Text(headline.value)
                     .font(.system(.title, design: .rounded, weight: .semibold))
                     .monospacedDigit()
-                    .foregroundStyle(isPast ? .secondary : countdown.color)
+                    .foregroundStyle(isPast ? .secondary : countdown.accent)
                 if !headline.unit.isEmpty {
                     Text(headline.unit).font(.caption).foregroundStyle(.secondary)
                 }
@@ -246,8 +247,8 @@ struct HeroCard: View {
         let headline = countdown.headline(at: now)
         let phase = countdown.phase(at: now)
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Image(systemName: countdown.symbol).font(.title2)
+            HStack(alignment: .top) {
+                CountdownIcon(countdown: countdown, size: 36, style: .onCard)
                 Spacer()
                 if countdown.repeatsYearly {
                     Image(systemName: "repeat").font(.subheadline).opacity(0.8)
@@ -274,26 +275,12 @@ struct HeroCard: View {
             .font(.subheadline)
             .opacity(0.85)
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(countdown.cardForeground)
         .padding(20)
         .frame(maxWidth: .infinity, minHeight: 220, alignment: .leading)
-        .background(countdown.color.gradient, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .background(countdown.cardBackground, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .padding(.vertical, 6)
-    }
-}
-
-struct SymbolBadge: View {
-    let symbol: String
-    let color: Color
-    var size: CGFloat = 40
-
-    var body: some View {
-        Image(systemName: symbol)
-            .font(.system(size: size * 0.45, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: size, height: size)
-            .background(color.gradient, in: RoundedRectangle(cornerRadius: size * 0.27, style: .continuous))
     }
 }
 
@@ -306,11 +293,16 @@ struct EditCountdownView: View {
     private let isNew: Bool
     @State private var draft: Countdown
     @State private var confirmDelete = false
+    @State private var photoItem: PhotosPickerItem?
+    @State private var importingFile = false
+    @State private var importFailed = false
+    /// Icon files picked during this edit, cleaned up if not kept.
+    @State private var pickedFiles: [String] = []
 
     init(countdown: Countdown?) {
         isNew = countdown == nil
-        let tomorrow = Calendar.current.date(byAdding: .day, value: 7, to: .now) ?? .now
-        _draft = State(initialValue: countdown ?? Countdown(title: "", date: tomorrow))
+        let nextWeek = Calendar.current.date(byAdding: .day, value: 7, to: .now) ?? .now
+        _draft = State(initialValue: countdown ?? Countdown(title: "", date: nextWeek))
     }
 
     var body: some View {
@@ -318,7 +310,7 @@ struct EditCountdownView: View {
             Form {
                 Section {
                     HStack(spacing: 14) {
-                        SymbolBadge(symbol: draft.symbol, color: draft.color, size: 44)
+                        CountdownIcon(countdown: draft, size: 44)
                         TextField("Title", text: $draft.title)
                             .font(.title3)
                     }
@@ -333,8 +325,9 @@ struct EditCountdownView: View {
                     Text("Yearly countdowns roll over to next year once they pass — good for birthdays and holidays.")
                 }
 
-                Section("Color") {
+                Section {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
+                        noColorSwatch
                         ForEach(Countdown.palette, id: \.name) { item in
                             Circle()
                                 .fill(item.color.gradient)
@@ -348,20 +341,57 @@ struct EditCountdownView: View {
                         }
                     }
                     .padding(.vertical, 6)
+                } header: {
+                    Text("Color")
+                } footer: {
+                    Text("Pick the crossed-out circle for no color: just the icon, no background.")
+                }
+
+                Section {
+                    PhotosPicker(selection: $photoItem, matching: .images) {
+                        Label("Choose from Photos", systemImage: "photo.on.rectangle")
+                    }
+                    Button {
+                        importingFile = true
+                    } label: {
+                        Label("Choose from Files", systemImage: "folder")
+                    }
+                    if draft.iconFile != nil {
+                        Button(role: .destructive) {
+                            draft.iconFile = nil
+                        } label: {
+                            Label("Remove Custom Icon", systemImage: "xmark.circle")
+                        }
+                    }
+                } header: {
+                    Text("Custom Icon")
+                } footer: {
+                    Text("Transparent PNGs keep their transparency. Pick \"No color\" above to show only your image.")
                 }
 
                 Section("Icon") {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 12) {
+                        if let file = draft.iconFile, let image = IconStore.image(file) {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .padding(6)
+                                .frame(width: 46, height: 46)
+                                .background(iconTileBackground(selected: true),
+                                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
                         ForEach(Countdown.symbols, id: \.self) { symbol in
+                            let selected = draft.iconFile == nil && symbol == draft.symbol
                             Image(systemName: symbol)
                                 .font(.title3)
                                 .frame(width: 46, height: 46)
-                                .foregroundStyle(symbol == draft.symbol ? .white : .primary)
-                                .background(
-                                    symbol == draft.symbol ? AnyShapeStyle(draft.color.gradient) : AnyShapeStyle(.quaternary),
-                                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                )
-                                .onTapGesture { draft.symbol = symbol }
+                                .foregroundStyle(selected && !draft.isColorless ? .white : .primary)
+                                .background(iconTileBackground(selected: selected),
+                                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .onTapGesture {
+                                    draft.symbol = symbol
+                                    draft.iconFile = nil
+                                }
                         }
                     }
                     .padding(.vertical, 6)
@@ -378,11 +408,15 @@ struct EditCountdownView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        cleanUpPickedFiles(keeping: nil)
+                        dismiss()
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(isNew ? "Add" : "Save") {
                         draft.title = draft.title.trimmingCharacters(in: .whitespaces)
+                        cleanUpPickedFiles(keeping: draft.iconFile)
                         store.save(draft)
                         dismiss()
                     }
@@ -392,10 +426,69 @@ struct EditCountdownView: View {
             }
             .confirmationDialog("Delete this countdown?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
+                    cleanUpPickedFiles(keeping: nil)
                     store.delete([draft.id])
                     dismiss()
                 }
             }
+            .onChange(of: photoItem) { _, item in
+                guard let item else { return }
+                Task {
+                    let data = try? await item.loadTransferable(type: Data.self)
+                    useImage(data)
+                    photoItem = nil
+                }
+            }
+            .fileImporter(isPresented: $importingFile, allowedContentTypes: [.image]) { result in
+                guard case .success(let url) = result else { return }
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                useImage(try? Data(contentsOf: url))
+            }
+            .alert("Couldn't use that image", isPresented: $importFailed) {
+                Button("OK", role: .cancel) {}
+            }
         }
+        .interactiveDismissDisabled(!pickedFiles.isEmpty)
+    }
+
+    private var noColorSwatch: some View {
+        let selected = draft.isColorless
+        return Circle()
+            .strokeBorder(Color.secondary, lineWidth: 2)
+            .frame(width: 34, height: 34)
+            .overlay {
+                Rectangle()
+                    .fill(Color.red)
+                    .frame(width: 2, height: 30)
+                    .rotationEffect(.degrees(45))
+            }
+            .overlay {
+                if selected {
+                    Circle().strokeBorder(Color.primary, lineWidth: 3).frame(width: 40, height: 40)
+                }
+            }
+            .frame(width: 40, height: 40)
+            .contentShape(Circle())
+            .onTapGesture { draft.colorName = Countdown.noColor }
+    }
+
+    private func iconTileBackground(selected: Bool) -> AnyShapeStyle {
+        guard selected else { return AnyShapeStyle(.quaternary) }
+        return draft.isColorless ? AnyShapeStyle(.tertiary) : AnyShapeStyle(draft.color.gradient)
+    }
+
+    private func useImage(_ data: Data?) {
+        guard let data, let file = IconStore.save(data) else {
+            importFailed = true
+            return
+        }
+        pickedFiles.append(file)
+        draft.iconFile = file
+    }
+
+    private func cleanUpPickedFiles(keeping kept: String?) {
+        for file in pickedFiles where file != kept { IconStore.delete(file) }
+        pickedFiles = []
     }
 }

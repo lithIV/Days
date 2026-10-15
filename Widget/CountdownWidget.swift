@@ -1,31 +1,91 @@
 import WidgetKit
 import SwiftUI
+import AppIntents
 
 struct CountdownsWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: SharedStore.countdownWidgetKind, provider: CountdownProvider()) { entry in
+        AppIntentConfiguration(kind: SharedStore.countdownWidgetKind,
+                               intent: CountdownWidgetIntent.self,
+                               provider: CountdownProvider()) { entry in
             CountdownWidgetView(entry: entry)
         }
         .configurationDisplayName("Countdowns")
-        .description("Days until the things you're waiting for.")
+        .description("Days until the things you're waiting for. Long-press → Edit Widget to pick one.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge,
                             .accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }
 
-struct CountdownEntry: TimelineEntry {
-    let date: Date
-    let countdowns: [Countdown]
+// MARK: - Configuration
 
-    /// Upcoming first; past ones only if nothing is upcoming.
-    var shown: [Countdown] {
-        let sorted = SharedStore.sortedCountdowns(countdowns, at: date)
-        let upcoming = sorted.filter { $0.phase(at: date) != .past }
-        return upcoming.isEmpty ? sorted : upcoming
+struct CountdownEntity: AppEntity {
+    let id: UUID
+    let title: String
+
+    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Countdown"
+    static var defaultQuery = CountdownQuery()
+
+    var displayRepresentation: DisplayRepresentation { DisplayRepresentation(title: "\(title)") }
+
+    init(_ countdown: Countdown) {
+        id = countdown.id
+        title = countdown.title
     }
 }
 
-struct CountdownProvider: TimelineProvider {
+struct CountdownQuery: EntityQuery {
+    func entities(for identifiers: [UUID]) async throws -> [CountdownEntity] {
+        SharedStore.loadCountdowns().filter { identifiers.contains($0.id) }.map(CountdownEntity.init)
+    }
+
+    func suggestedEntities() async throws -> [CountdownEntity] {
+        SharedStore.sortedCountdowns(SharedStore.loadCountdowns()).map(CountdownEntity.init)
+    }
+}
+
+enum CountdownLayout: String, AppEnum {
+    case single, list
+
+    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Layout"
+    static var caseDisplayRepresentations: [CountdownLayout: DisplayRepresentation] = [
+        .single: "One countdown, full widget",
+        .list: "List of upcoming",
+    ]
+}
+
+struct CountdownWidgetIntent: WidgetConfigurationIntent {
+    static var title: LocalizedStringResource = "Countdown"
+    static var description = IntentDescription("Choose what this widget shows.")
+
+    @Parameter(title: "Countdown", description: "Leave empty to always show the next one.")
+    var countdown: CountdownEntity?
+
+    @Parameter(title: "Layout", default: .single)
+    var layout: CountdownLayout
+}
+
+// MARK: - Timeline
+
+struct CountdownEntry: TimelineEntry {
+    let date: Date
+    let countdowns: [Countdown]
+    var selectedID: UUID?
+    var layout: CountdownLayout = .single
+
+    /// The picked countdown first, then upcoming ones (past only if nothing is upcoming).
+    var shown: [Countdown] {
+        let sorted = SharedStore.sortedCountdowns(countdowns, at: date)
+        let upcoming = sorted.filter { $0.phase(at: date) != .past }
+        var list = upcoming.isEmpty ? sorted : upcoming
+        if let id = selectedID, let picked = countdowns.first(where: { $0.id == id }) {
+            list.removeAll { $0.id == id }
+            list.insert(picked, at: 0)
+        }
+        return list
+    }
+}
+
+struct CountdownProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> CountdownEntry {
         let cal = Calendar.current
         return CountdownEntry(date: .now, countdowns: [
@@ -35,12 +95,14 @@ struct CountdownProvider: TimelineProvider {
         ])
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (CountdownEntry) -> Void) {
+    func snapshot(for configuration: CountdownWidgetIntent, in context: Context) async -> CountdownEntry {
         let saved = SharedStore.loadCountdowns()
-        completion(context.isPreview && saved.isEmpty ? placeholder(in: context) : CountdownEntry(date: .now, countdowns: saved))
+        if context.isPreview && saved.isEmpty { return placeholder(in: context) }
+        return CountdownEntry(date: .now, countdowns: saved,
+                              selectedID: configuration.countdown?.id, layout: configuration.layout)
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<CountdownEntry>) -> Void) {
+    func timeline(for configuration: CountdownWidgetIntent, in context: Context) async -> Timeline<CountdownEntry> {
         let now = Date.now
         let cal = Calendar.current
         let saved = SharedStore.loadCountdowns()
@@ -50,27 +112,40 @@ struct CountdownProvider: TimelineProvider {
         let horizon = midnights.last ?? now.addingTimeInterval(86_400)
         let targets = saved.map { $0.target(from: now) }.filter { $0 > now && $0 < horizon }
         let dates = Set([now] + midnights + targets).sorted()
-        completion(Timeline(entries: dates.map { CountdownEntry(date: $0, countdowns: saved) }, policy: .atEnd))
+        let entries = dates.map {
+            CountdownEntry(date: $0, countdowns: saved,
+                           selectedID: configuration.countdown?.id, layout: configuration.layout)
+        }
+        return Timeline(entries: entries, policy: .atEnd)
     }
 }
+
+// MARK: - Views
 
 struct CountdownWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: CountdownEntry
 
+    private var isSystem: Bool {
+        family == .systemSmall || family == .systemMedium || family == .systemLarge
+    }
+
     var body: some View {
         let shown = entry.shown
-        content(shown)
+        let single = entry.layout == .single || family == .systemSmall
+        content(shown, single: single)
             .containerBackground(for: .widget) {
-                if family == .systemSmall, let first = shown.first {
-                    Rectangle().fill(first.color.gradient)
-                } else if family == .systemMedium || family == .systemLarge || family == .systemSmall {
+                if isSystem, single, let c = shown.first {
+                    Rectangle().fill(c.cardBackground)
+                } else if isSystem {
                     Color(uiColor: .systemBackground)
+                } else {
+                    Color.clear
                 }
             }
     }
 
-    @ViewBuilder private func content(_ shown: [Countdown]) -> some View {
+    @ViewBuilder private func content(_ shown: [Countdown], single: Bool) -> some View {
         switch family {
         case .accessoryInline:
             if let c = shown.first {
@@ -83,7 +158,7 @@ struct CountdownWidgetView: View {
                 AccessoryWidgetBackground()
                 if let c = shown.first {
                     VStack(spacing: -2) {
-                        Image(systemName: c.symbol).font(.caption)
+                        accessoryIcon(c, size: 12)
                         bigValue(c).font(.system(size: 18, weight: .bold, design: .rounded)).minimumScaleFactor(0.4)
                         Text(c.headline(at: entry.date).unit.isEmpty ? " " : unitShort(c))
                             .font(.system(size: 9, weight: .medium))
@@ -96,7 +171,10 @@ struct CountdownWidgetView: View {
         case .accessoryRectangular:
             if let c = shown.first {
                 VStack(alignment: .leading, spacing: 0) {
-                    Label(c.title, systemImage: c.symbol).font(.headline).lineLimit(1)
+                    HStack(spacing: 4) {
+                        accessoryIcon(c, size: 14)
+                        Text(c.title).font(.headline).lineLimit(1)
+                    }
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         bigValue(c).font(.system(.title, design: .rounded, weight: .bold))
                         Text(c.headline(at: entry.date).unit).font(.caption)
@@ -106,41 +184,91 @@ struct CountdownWidgetView: View {
             } else {
                 Label("No countdowns", systemImage: "calendar")
             }
-        case .systemSmall:
-            if let c = shown.first { small(c) } else { empty }
-        case .systemLarge:
-            if shown.isEmpty { empty } else { list(Array(shown.prefix(6))) }
         default:
-            if shown.isEmpty { empty } else { list(Array(shown.prefix(3))) }
+            if shown.isEmpty {
+                empty
+            } else if single {
+                switch family {
+                case .systemSmall: small(shown[0])
+                case .systemLarge: large(shown[0])
+                default: medium(shown[0])
+                }
+            } else {
+                list(Array(shown.prefix(family == .systemLarge ? 6 : 3)))
+            }
         }
     }
 
+    // MARK: Single countdown, whole widget
+
     private func small(_ c: Countdown) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Image(systemName: c.symbol).font(.title3)
+            CountdownIcon(countdown: c, size: 28, style: .onCard)
             Spacer(minLength: 0)
             bigValue(c)
                 .font(.system(size: 44, weight: .bold, design: .rounded))
                 .minimumScaleFactor(0.4)
                 .lineLimit(1)
-            if !c.headline(at: entry.date).unit.isEmpty {
-                Text(c.headline(at: entry.date).unit).font(.subheadline.weight(.semibold)).opacity(0.85)
-            }
+            unitText(c).font(.subheadline.weight(.semibold)).opacity(0.85)
             Text(c.title).font(.caption.weight(.medium)).lineLimit(1).opacity(0.9)
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(c.cardForeground)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
+
+    private func medium(_ c: Countdown) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                CountdownIcon(countdown: c, size: 40, style: .onCard)
+                Spacer(minLength: 0)
+                Text(c.title).font(.title3.weight(.bold)).lineLimit(2)
+                Text(c.dateText(at: entry.date)).font(.caption).opacity(0.8).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            VStack(alignment: .trailing, spacing: -4) {
+                bigValue(c)
+                    .font(.system(size: 72, weight: .bold, design: .rounded))
+                    .minimumScaleFactor(0.35)
+                    .lineLimit(1)
+                    .multilineTextAlignment(.trailing)
+                unitText(c).font(.headline).opacity(0.85)
+            }
+            .frame(maxWidth: 180, alignment: .trailing)
+        }
+        .foregroundStyle(c.cardForeground)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func large(_ c: Countdown) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top) {
+                CountdownIcon(countdown: c, size: 64, style: .onCard)
+                Spacer()
+                if c.repeatsYearly {
+                    Image(systemName: "repeat").font(.headline).opacity(0.8)
+                }
+            }
+            Spacer(minLength: 0)
+            bigValue(c)
+                .font(.system(size: 120, weight: .bold, design: .rounded))
+                .minimumScaleFactor(0.3)
+                .lineLimit(1)
+            unitText(c).font(.title2.weight(.semibold)).opacity(0.85)
+            Spacer(minLength: 0)
+            Text(c.title).font(.title.weight(.bold)).lineLimit(2)
+            Text(c.dateText(at: entry.date)).font(.subheadline).opacity(0.8)
+        }
+        .foregroundStyle(c.cardForeground)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    }
+
+    // MARK: List
 
     private func list(_ items: [Countdown]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(items) { c in
                 HStack(spacing: 10) {
-                    Image(systemName: c.symbol)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 28, height: 28)
-                        .background(c.color.gradient, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    CountdownIcon(countdown: c, size: 28)
                     VStack(alignment: .leading, spacing: 0) {
                         Text(c.title).font(.subheadline.weight(.semibold)).lineLimit(1)
                         Text(c.dateText(at: entry.date)).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
@@ -149,9 +277,9 @@ struct CountdownWidgetView: View {
                     VStack(alignment: .trailing, spacing: -2) {
                         bigValue(c)
                             .font(.system(.title3, design: .rounded, weight: .bold))
-                            .foregroundStyle(c.color)
+                            .foregroundStyle(c.accent)
                             .multilineTextAlignment(.trailing)
-                        Text(c.headline(at: entry.date).unit).font(.caption2).foregroundStyle(.secondary)
+                        unitText(c).font(.caption2).foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: 100, alignment: .trailing)
                 }
@@ -169,6 +297,8 @@ struct CountdownWidgetView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    // MARK: Pieces
+
     /// The big number. Under a day away it ticks live instead.
     @ViewBuilder private func bigValue(_ c: Countdown) -> some View {
         let target = c.target(from: entry.date)
@@ -176,6 +306,19 @@ struct CountdownWidgetView: View {
             Text(timerInterval: entry.date...target, countsDown: true).monospacedDigit()
         } else {
             Text(c.headline(at: entry.date).value).monospacedDigit()
+        }
+    }
+
+    @ViewBuilder private func unitText(_ c: Countdown) -> some View {
+        let unit = c.headline(at: entry.date).unit
+        if !unit.isEmpty { Text(unit) }
+    }
+
+    @ViewBuilder private func accessoryIcon(_ c: Countdown, size: CGFloat) -> some View {
+        if let file = c.iconFile, let image = IconStore.image(file) {
+            Image(uiImage: image).resizable().scaledToFit().frame(width: size, height: size)
+        } else {
+            Image(systemName: c.symbol).font(.system(size: size))
         }
     }
 
