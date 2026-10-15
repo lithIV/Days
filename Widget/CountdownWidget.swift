@@ -229,24 +229,28 @@ struct CountdownWidgetView: View {
     }
 
     private func medium(_ c: Countdown) -> some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .top, spacing: 12) {
                 CountdownIcon(countdown: c, size: 40 * c.iconSize, style: .onCard)
                 Spacer(minLength: 0)
-                Text(c.title).font(.title3.weight(.bold)).lineLimit(2)
-                Text(c.dateText(at: entry.date)).font(.caption).opacity(0.8).lineLimit(1)
+                VStack(alignment: .trailing, spacing: -4) {
+                    bigValue(c)
+                        .font(.system(size: 64, weight: .bold, design: .rounded))
+                        .minimumScaleFactor(0.35)
+                        .lineLimit(1)
+                        .multilineTextAlignment(.trailing)
+                    unitText(c).font(.headline).opacity(0.85)
+                }
+                .frame(maxWidth: 180, alignment: .trailing)
             }
             Spacer(minLength: 0)
-            VStack(alignment: .trailing, spacing: -4) {
-                bigValue(c)
-                    .font(.system(size: 72, weight: .bold, design: .rounded))
-                    .minimumScaleFactor(0.35)
-                    .lineLimit(1)
-                    .multilineTextAlignment(.trailing)
-                unitText(c).font(.headline).opacity(0.85)
-                ticker(c, alignment: .trailing).font(.subheadline.weight(.semibold)).opacity(0.85).padding(.top, 5)
+            Text(c.title).font(.title3.weight(.bold)).lineLimit(1)
+            // Date and live ticker share one line so they sit on the same baseline.
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(c.dateText(at: entry.date)).font(.caption).opacity(0.8).lineLimit(1)
+                Spacer(minLength: 0)
+                ticker(c, alignment: .trailing).font(.subheadline.weight(.semibold)).opacity(0.85)
             }
-            .frame(maxWidth: 180, alignment: .trailing)
         }
         .foregroundStyle(c.cardForeground)
         .shadow(color: .black.opacity(c.hasBackgroundImage ? 0.4 : 0), radius: 6, y: 1)
