@@ -4,13 +4,15 @@ import UserNotifications
 @main
 struct TockApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var store = TimerStore()
+    @State private var timers = TimerStore()
+    @State private var countdowns = CountdownStore()
     @AppStorage("appearance") private var appearance: Appearance = .system
 
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environment(store)
+                .environment(timers)
+                .environment(countdowns)
                 .tint(.orange)
                 .preferredColorScheme(appearance.colorScheme)
         }
