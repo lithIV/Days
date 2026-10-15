@@ -118,10 +118,7 @@ struct CountdownProvider: AppIntentTimelineProvider {
         let targets = saved.map { $0.target(from: now) }.filter { $0 > now && $0 < horizon }
         // The live h:m:s ticker rolls over every 24 hours before each target.
         let dayBoundaries = saved.flatMap { c in
-            (1...4).flatMap { k -> [Date] in
-                let boundary = c.target(from: now).addingTimeInterval(-Double(k) * 86_400)
-                return [boundary, boundary.addingTimeInterval(-3600), boundary.addingTimeInterval(-600)]
-            }
+            (1...4).map { c.target(from: now).addingTimeInterval(-Double($0) * 86_400) }
         }.filter { $0 > now && $0 < horizon }
         let dates = Set([now] + midnights + targets + dayBoundaries).sorted()
         let entries = dates.map {
@@ -342,23 +339,13 @@ struct CountdownWidgetView: View {
            let parts = c.tickerParts(at: entry.date) {
             // One concatenated Text so it sizes to its content; a bare timer
             // Text in a widget stretches to fill the row.
-            (Text(parts.days > 0 ? "\(parts.days)d " : "") + Text(hourPadding(until: parts.until))
+            (Text(parts.days > 0 ? "\(parts.days)d " : "")
                 + Text(timerInterval: entry.date...parts.until, countsDown: true))
                 .monospacedDigit()
                 .lineLimit(1)
                 .multilineTextAlignment(alignment)
                 .frame(maxWidth: .infinity, alignment: alignment == .trailing ? .trailing : .leading)
         }
-    }
-
-    /// iOS timer text drops the hours under an hour ("42:44", "9:59").
-    /// Pad it back to "0:42:44" / "0:09:59"; the timeline adds entries at the
-    /// 1-hour and 10-minute marks so the padding switches on time.
-    private func hourPadding(until: Date) -> String {
-        let left = until.timeIntervalSince(entry.date)
-        if left < 600 { return "0:0" }
-        if left < 3600 { return "0:" }
-        return ""
     }
 
     @ViewBuilder private func unitText(_ c: Countdown) -> some View {
