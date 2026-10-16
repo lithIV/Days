@@ -229,33 +229,32 @@ struct CountdownWidgetView: View {
     }
 
     private func medium(_ c: Countdown) -> some View {
-        // Two columns that both build up from a shared bottom line: the date
-        // and the live ticker sit on one baseline, everything else stacks on top.
-        HStack(alignment: .lastTextBaseline, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .top, spacing: 12) {
                 CountdownIcon(countdown: c, size: 40 * c.iconSize, style: .onCard)
                 Spacer(minLength: 0)
-                Text(c.title).font(.title3.weight(.bold)).lineLimit(1)
-                Text(c.dateText(at: entry.date)).font(.caption).opacity(0.8).lineLimit(1)
+                VStack(alignment: .trailing, spacing: -12) {
+                    bigValue(c)
+                        .font(.system(size: 64, weight: .bold, design: .rounded))
+                        .minimumScaleFactor(0.35)
+                        .lineLimit(1)
+                        .multilineTextAlignment(.trailing)
+                    unitText(c).font(.headline).opacity(0.85)
+                }
+                .frame(maxWidth: 180, alignment: .trailing)
+                // Big digits sit 12pt below their line's top edge (measured on
+                // device). Shift the column up so the digits' top meets the
+                // icon's top; the -12 spacing trims the gap above "days".
+                .offset(y: -12)
             }
             Spacer(minLength: 0)
-            VStack(alignment: .trailing, spacing: 0) {
+            Text(c.title).font(.title3.weight(.bold)).lineLimit(1)
+            // Date and live ticker share one line so they sit on the same baseline.
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(c.dateText(at: entry.date)).font(.caption).opacity(0.8).lineLimit(1)
                 Spacer(minLength: 0)
-                bigValue(c)
-                    .font(.system(size: 64, weight: .bold, design: .rounded))
-                    .minimumScaleFactor(0.35)
-                    .lineLimit(1)
-                    .multilineTextAlignment(.trailing)
-                    // Trim the empty descender space under the digits so
-                    // "days" sits snug beneath the number.
-                    .padding(.bottom, -12)
-                unitText(c).font(.headline).opacity(0.85)
-                ticker(c, alignment: .trailing)
-                    .font(.subheadline.weight(.semibold))
-                    .opacity(0.85)
-                    .padding(.top, 4)
+                ticker(c, alignment: .trailing).font(.subheadline.weight(.semibold)).opacity(0.85)
             }
-            .frame(maxWidth: 180, alignment: .trailing)
         }
         .foregroundStyle(c.cardForeground)
         .shadow(color: .black.opacity(c.hasBackgroundImage ? 0.4 : 0), radius: 6, y: 1)
