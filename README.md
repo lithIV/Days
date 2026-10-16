@@ -1,4 +1,4 @@
-# Days (project: Tock)
+# Days
 
 A small, native-feeling iOS countdown app (SwiftUI, iOS 17+).
 
@@ -14,8 +14,8 @@ A small, native-feeling iOS countdown app (SwiftUI, iOS 17+).
 
 ## Getting the IPA
 
-Every push to this branch builds an unsigned `Tock.ipa` on GitHub Actions and
-attaches it to the **`tock-latest`** release (also uploaded as a workflow
+Every push to `main` builds an unsigned `Days.ipa` on GitHub Actions and
+attaches it to the **`latest`** release (also uploaded as a workflow
 artifact). Open it on your phone and share it to LiveContainer.
 
 ## Building yourself (macOS)

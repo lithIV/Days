@@ -2,7 +2,7 @@ name: Build IPA
 
 on:
   push:
-    branches: [claude/tock-ios-timer]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -43,20 +43,22 @@ jobs:
           codesign --force --sign - --entitlements App/Tock.entitlements "$APP"
           mkdir -p Payload
           cp -R "$APP" Payload/
-          zip -qry Tock.ipa Payload
-          ls -lh Tock.ipa
+          zip -qry Days.ipa Payload
+          ls -lh Days.ipa
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Tock-ipa
-          path: Tock.ipa
+          name: Days-ipa
+          path: Days.ipa
 
-      - name: Publish to the "tock-latest" release
+      - name: Publish to the "latest" release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Old release name from before the move to main; harmless once gone.
           gh release delete tock-latest --yes --cleanup-tag || true
-          gh release create tock-latest Tock.ipa \
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest Days.ipa \
             --target "$GITHUB_SHA" \
             --title "Days (latest build)" \
             --notes "Unsigned IPA built from ${GITHUB_SHA::7}. Install with LiveContainer, SideStore or AltStore." \
