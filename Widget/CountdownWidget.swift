@@ -229,23 +229,29 @@ struct CountdownWidgetView: View {
     }
 
     private func medium(_ c: Countdown) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        // Size the number so its digits are exactly as tall as the icon
+        // (digits measure ~0.59 of the font size on device), so their tops
+        // and bottoms both line up. Clamped so it always fits the widget.
+        let iconSize = 40 * c.iconSize
+        let numberSize = min(72, max(48, iconSize / 0.59))
+        return VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .top, spacing: 12) {
-                CountdownIcon(countdown: c, size: 40 * c.iconSize, style: .onCard)
+                CountdownIcon(countdown: c, size: iconSize, style: .onCard)
                 Spacer(minLength: 0)
-                VStack(alignment: .trailing, spacing: -12) {
+                VStack(alignment: .trailing, spacing: -numberSize * 0.19) {
                     bigValue(c)
-                        .font(.system(size: 64, weight: .bold, design: .rounded))
+                        .font(.system(size: numberSize, weight: .bold, design: .rounded))
                         .minimumScaleFactor(0.35)
                         .lineLimit(1)
                         .multilineTextAlignment(.trailing)
                     unitText(c).font(.headline).opacity(0.85)
                 }
                 .frame(maxWidth: 180, alignment: .trailing)
-                // Big digits sit 12pt below their line's top edge (measured on
-                // device). Shift the column up so the digits' top meets the
-                // icon's top; the -12 spacing trims the gap above "days".
-                .offset(y: -12)
+                // Big digits sit ~0.19 of the font size below their line's top
+                // edge (measured on device). Shift the column up so the digits'
+                // top meets the icon's top; the matching negative spacing trims
+                // the gap above "days".
+                .offset(y: -numberSize * 0.19)
             }
             Spacer(minLength: 0)
             Text(c.title).font(.title3.weight(.bold)).lineLimit(1)
