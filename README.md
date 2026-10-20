@@ -1,6 +1,6 @@
 # Days
 
-A small, native-feeling iOS countdown app (SwiftUI, iOS 17+).
+A small iOS countdown app (SwiftUI, iOS 17+).
 
 - Count down to any date — all-day or a specific time
 - Yearly repeat for birthdays / holidays (rolls over to next year automatically)
