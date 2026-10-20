@@ -72,7 +72,10 @@ struct Countdown: Identifiable, Codable, Hashable {
         let t = target(from: now)
         let total = t.timeIntervalSince(now)
         guard total > 0 else { return nil }
-        let d = Int(total / 86_400)
+        // Keep the leftover in (0, 24h]: at an exact day boundary (e.g. a
+        // widget snapshot at midnight for an all-day countdown) a plain floor
+        // leaves 0s, so the live timer would sit at 0:00 until the next snapshot.
+        let d = Int((total / 86_400).rounded(.up)) - 1
         return (d, t.addingTimeInterval(-Double(d) * 86_400))
     }
 
