@@ -111,16 +111,25 @@ struct CountdownProvider: AppIntentTimelineProvider {
         let now = Date.now
         let cal = Calendar.current
         let saved = SharedStore.loadCountdowns()
-        // Day counts change at midnight; timed countdowns also flip when they hit zero.
+        // iOS can be slow to ask for a fresh timeline, so cover a month up
+        // front instead of a few days: one entry per calendar day (the big
+        // day count changes at midnight) ...
+        let horizonDays = 30
         let today = cal.startOfDay(for: now)
-        let midnights = (1...3).compactMap { cal.date(byAdding: .day, value: $0, to: today) }
-        let horizon = midnights.last ?? now.addingTimeInterval(86_400)
-        let targets = saved.map { $0.target(from: now) }.filter { $0 > now && $0 < horizon }
-        // The live h:m:s ticker rolls over every 24 hours before each target.
-        let dayBoundaries = saved.flatMap { c in
-            (1...4).map { c.target(from: now).addingTimeInterval(-Double($0) * 86_400) }
-        }.filter { $0 > now && $0 < horizon }
-        let dates = Set([now] + midnights + targets + dayBoundaries).sorted()
+        let midnights = (1...horizonDays).compactMap { cal.date(byAdding: .day, value: $0, to: today) }
+        let horizon = midnights.last ?? now.addingTimeInterval(Double(horizonDays) * 86_400)
+        // ... plus every 24 hours counting back from each target, which is when
+        // the live h:m:s ticker's window rolls over (this drifts from midnight
+        // across daylight-saving changes), plus the moment it hits zero.
+        let boundaries = saved.flatMap { c -> [Date] in
+            let t = c.target(from: now)
+            guard t > now else { return [] }
+            let kMin = max(0, Int((t.timeIntervalSince(horizon) / 86_400).rounded(.up)))
+            let kMax = Int(t.timeIntervalSince(now) / 86_400)
+            guard kMax >= kMin else { return [] }
+            return (kMin...kMax).map { t.addingTimeInterval(-Double($0) * 86_400) }
+        }
+        let dates = Array(Set([now] + midnights + boundaries).filter { $0 >= now && $0 <= horizon }.sorted().prefix(150))
         let entries = dates.map {
             CountdownEntry(date: $0, countdowns: saved,
                            selectedID: configuration.countdown?.id, layout: configuration.layout,

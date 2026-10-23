@@ -1,11 +1,13 @@
 import SwiftUI
 import UserNotifications
+import WidgetKit
 
 @main
 struct TockApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var countdowns = CountdownStore()
     @AppStorage("appearance") private var appearance: Appearance = .system
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -13,6 +15,12 @@ struct TockApp: App {
                 .environment(countdowns)
                 .tint(.orange)
                 .preferredColorScheme(appearance.colorScheme)
+                // Redraw the widget whenever the app opens. iOS keeps showing a
+                // widget as last drawn (even across app updates) until its
+                // timeline reloads, which used to need an edit + Save.
+                .onChange(of: scenePhase, initial: true) { _, phase in
+                    if phase == .active { WidgetCenter.shared.reloadAllTimelines() }
+                }
         }
     }
 }
